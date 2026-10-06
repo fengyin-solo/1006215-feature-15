@@ -3,7 +3,7 @@
     <header class="page-head">
       <div>
         <h2>导轴承管理</h2>
-        <p class="page-desc">维护导轴承，围绕轴承编号、所属机组、上导温度、下导温度做登记、筛选与状态流转。</p>
+        <p class="page-desc">导轴承待办清单由检修工作票牵动：机组在检修中且其导轴承待检修的，挂进下面的待办，台数跟着工作票走。</p>
       </div>
       <div class="page-actions">
         <button class="btn primary" type="button" @click="openCreate">登记导轴承</button>
@@ -17,6 +17,29 @@
         <strong class="stat-value">{{ item.value }}</strong>
       </article>
     </div>
+
+    <section class="gap-panel">
+      <h3>检修工作票牵动的待办（{{ todos.length }} 项，涉及检修中机组 {{ maintenanceCount }} 台）</h3>
+      <table class="data-table">
+        <thead>
+          <tr><th>工作票号</th><th>所属机组</th><th>轴承编号</th><th>上导温度</th><th>下导温度</th><th>振动数值</th><th>检测日期</th></tr>
+        </thead>
+        <tbody>
+          <tr v-for="item in todos" :key="String(item.bearing.id)">
+            <td>{{ item.ticketNo }}</td>
+            <td>{{ item.unit }}</td>
+            <td>{{ item.bearing['轴承编号'] }}</td>
+            <td>{{ item.bearing['上导温度'] }}</td>
+            <td>{{ item.bearing['下导温度'] }}</td>
+            <td>{{ item.bearing['振动数值'] }}</td>
+            <td>{{ item.bearing['检测日期'] }}</td>
+          </tr>
+          <tr v-if="!todos.length">
+            <td colspan="7" class="empty-state">当前没有由检修中工作票牵动的导轴承待办</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
 
     <p class="status-legend">
       <span v-for="item in statusSummary" :key="item.status" class="legend-item">
@@ -64,7 +87,7 @@
     </table>
 
     <footer class="page-foot">
-      <span>共 {{ total }} 条导轴承记录</span>
+      <span>共 {{ total }} 条导轴承记录；待办只读检修工作票那一份结论</span>
       <span v-if="errorMessage" class="error-text">{{ errorMessage }}</span>
     </footer>
   </section>
@@ -74,6 +97,8 @@
 import { computed, onMounted, ref } from 'vue'
 
 import {
+  bearingTodoList,
+  capacitySnapshot,
   downloadEntries,
   listEntries,
   moduleMeta,
@@ -85,13 +110,21 @@ const meta = moduleMeta('bearing')
 const columns = ["轴承编号", "所属机组", "上导温度", "下导温度", "油位高度", "振动数值", "检测日期", "轴承状态"]
 const actions = ["提交检测", "标记偏高", "确认检修"]
 const statuses = ["正常", "温度偏高", "待检修", "已检修"]
-const stats = [{"label": "正常轴承", "value": 0}, {"label": "温度偏高轴承", "value": 0}, {"label": "待检修轴承", "value": 0}]
 
 const rows = ref<EntryRow[]>([])
 const total = ref(0)
 const errorMessage = ref('')
 const filters = ref<Record<string, string>>({})
 const filterFields = columns.slice(0, 3)
+const todos = ref(bearingTodoList())
+const maintenanceCount = ref(capacitySnapshot().maintenanceCount)
+
+const stats = computed(() => [
+  { label: '正常轴承', value: rows.value.filter((row) => String(row.status) === '正常').length },
+  { label: '温度偏高轴承', value: rows.value.filter((row) => String(row.status) === '温度偏高').length },
+  { label: '待检修轴承', value: rows.value.filter((row) => String(row.status) === '待检修').length },
+])
+
 const statusSummary = computed(() =>
   statuses.map((status: string) => ({
     status,
@@ -128,6 +161,8 @@ function reload() {
     const payload = listEntries(meta.key, filters.value)
     rows.value = payload.items
     total.value = payload.total
+    todos.value = bearingTodoList()
+    maintenanceCount.value = capacitySnapshot().maintenanceCount
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '导轴承列表读取失败'
   }

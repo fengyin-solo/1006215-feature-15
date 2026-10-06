@@ -3,7 +3,7 @@
     <header class="page-head">
       <div>
         <h2>发电计划管理</h2>
-        <p class="page-desc">维护发电计划，围绕计划编号、计划日期、计划出力、实际出力做登记、筛选与状态流转。</p>
+        <p class="page-desc">机组可调容量由检修工作票回写：检修中机组不计入可调容量，本页台数与「机组检修」页完全一致。</p>
       </div>
       <div class="page-actions">
         <button class="btn primary" type="button" @click="openCreate">登记发电计划</button>
@@ -12,9 +12,20 @@
     </header>
 
     <div class="stat-row">
-      <article v-for="item in stats" :key="item.label" class="stat-card">
-        <span class="stat-label">{{ item.label }}</span>
-        <strong class="stat-value">{{ item.value }}</strong>
+      <article class="stat-card">
+        <span class="stat-label">检修中机组（工作票回写）</span>
+        <strong class="stat-value">{{ snapshot.maintenanceCount }}</strong>
+        <span class="page-desc">{{ snapshot.maintenanceUnits.join('、') || '无' }}</span>
+      </article>
+      <article class="stat-card">
+        <span class="stat-label">机组可调容量(MW)</span>
+        <strong class="stat-value">{{ snapshot.adjustableMw }}</strong>
+        <span class="page-desc">总装机 {{ snapshot.totalMw }} − 检修占用 {{ snapshot.maintenanceMw }}</span>
+      </article>
+      <article class="stat-card">
+        <span class="stat-label">在册机组台数</span>
+        <strong class="stat-value">{{ snapshot.totalUnits }}</strong>
+        <span class="page-desc">检修 {{ snapshot.maintenanceCount }} 台，其余可参与计划</span>
       </article>
     </div>
 
@@ -22,6 +33,7 @@
       <span v-for="item in statusSummary" :key="item.status" class="legend-item">
         {{ item.status }}：{{ item.count }}
       </span>
+      <span class="legend-item">报表与明细同源：台数取自同一份工作票结论</span>
     </p>
 
     <form class="filter-bar" @submit.prevent="reload">
@@ -64,7 +76,7 @@
     </table>
 
     <footer class="page-foot">
-      <span>共 {{ total }} 条发电计划记录</span>
+      <span>共 {{ total }} 条发电计划记录；检修中机组台数与机组检修页一致：{{ snapshot.maintenanceCount }}</span>
       <span v-if="errorMessage" class="error-text">{{ errorMessage }}</span>
     </footer>
   </section>
@@ -74,24 +86,25 @@
 import { computed, onMounted, ref } from 'vue'
 
 import {
+  capacitySnapshot,
   downloadEntries,
   listEntries,
   moduleMeta,
   runAction as applyAction,
 } from '@/api/local-service'
-import type { EntryRow } from '@/data/types'
+import type { CapacitySnapshot, EntryRow } from '@/data/types'
 
 const meta = moduleMeta('generation')
-const columns = ["计划编号", "计划日期", "计划出力", "实际出力", "日发电量", "上网电量", "完成比率", "计划状态"]
+const columns = meta.fields
 const actions = ["提交编制", "下达计划", "确认完成"]
 const statuses = ["待编制", "已下达", "执行中", "已完成"]
-const stats = [{"label": "计划发电量", "value": 0}, {"label": "实际发电量", "value": 0}, {"label": "计划完成率", "value": 0}]
 
 const rows = ref<EntryRow[]>([])
 const total = ref(0)
 const errorMessage = ref('')
 const filters = ref<Record<string, string>>({})
 const filterFields = columns.slice(0, 3)
+const snapshot = ref<CapacitySnapshot>(capacitySnapshot())
 const statusSummary = computed(() =>
   statuses.map((status: string) => ({
     status,
@@ -128,6 +141,8 @@ function reload() {
     const payload = listEntries(meta.key, filters.value)
     rows.value = payload.items
     total.value = payload.total
+    // 每次进页面/流转后重读快照，保证与机组检修页取值一致。
+    snapshot.value = capacitySnapshot()
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '发电计划列表读取失败'
   }

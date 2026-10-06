@@ -82,7 +82,7 @@ import {
 import type { EntryRow } from '@/data/types'
 
 const meta = moduleMeta('unit')
-const columns = ["机组编号", "机组型号", "额定转速", "有功出力", "无功出力", "累计运行小时", "振动数值", "运行状态"]
+const columns = meta.fields
 const actions = ["开机并网", "停机转备", "登记故障"]
 const statuses = ["待启动", "运行中", "停机备用", "故障停机"]
 const stats = [{"label": "运行中机组", "value": 0}, {"label": "备用机组", "value": 0}, {"label": "故障机组", "value": 0}]
