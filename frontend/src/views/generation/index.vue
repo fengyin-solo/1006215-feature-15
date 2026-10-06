@@ -12,11 +12,16 @@
     </header>
 
     <div class="stat-row">
-      <article v-for="item in stats" :key="item.label" class="stat-card">
+      <article v-for="item in statCards" :key="item.label" class="stat-card">
         <span class="stat-label">{{ item.label }}</span>
         <strong class="stat-value">{{ item.value }}</strong>
       </article>
     </div>
+
+    <p class="capacity-hint">
+      机组可调容量 = 机组总台数 − 检修中机组台数；检修中的机组不计入可调容量。
+      检修中机组台数与机组检修页同源，两处读数始终一致。
+    </p>
 
     <p class="status-legend">
       <span v-for="item in statusSummary" :key="item.status" class="legend-item">
@@ -75,23 +80,30 @@ import { computed, onMounted, ref } from 'vue'
 
 import {
   downloadEntries,
+  generationCapacity,
   listEntries,
   moduleMeta,
   runAction as applyAction,
 } from '@/api/local-service'
-import type { EntryRow } from '@/data/types'
+import type { CapacityInfo, EntryRow } from '@/data/types'
 
 const meta = moduleMeta('generation')
 const columns = ["计划编号", "计划日期", "计划出力", "实际出力", "日发电量", "上网电量", "完成比率", "计划状态"]
 const actions = ["提交编制", "下达计划", "确认完成"]
 const statuses = ["待编制", "已下达", "执行中", "已完成"]
-const stats = [{"label": "计划发电量", "value": 0}, {"label": "实际发电量", "value": 0}, {"label": "计划完成率", "value": 0}]
 
 const rows = ref<EntryRow[]>([])
 const total = ref(0)
 const errorMessage = ref('')
 const filters = ref<Record<string, string>>({})
 const filterFields = columns.slice(0, 3)
+const capacity = ref<CapacityInfo>({ totalUnits: 0, repairingUnits: 0, availableUnits: 0 })
+
+const statCards = computed(() => [
+  { label: '机组总台数（台）', value: capacity.value.totalUnits },
+  { label: '检修中机组（台）', value: capacity.value.repairingUnits },
+  { label: '机组可调容量（台）', value: capacity.value.availableUnits },
+])
 const statusSummary = computed(() =>
   statuses.map((status: string) => ({
     status,
@@ -128,6 +140,7 @@ function reload() {
     const payload = listEntries(meta.key, filters.value)
     rows.value = payload.items
     total.value = payload.total
+    capacity.value = generationCapacity()
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '发电计划列表读取失败'
   }
@@ -135,3 +148,11 @@ function reload() {
 
 onMounted(reload)
 </script>
+
+<style scoped>
+.capacity-hint {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0 0 10px;
+}
+</style>

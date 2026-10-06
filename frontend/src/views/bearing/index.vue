@@ -12,11 +12,38 @@
     </header>
 
     <div class="stat-row">
-      <article v-for="item in stats" :key="item.label" class="stat-card">
+      <article v-for="item in statCards" :key="item.label" class="stat-card">
         <span class="stat-label">{{ item.label }}</span>
         <strong class="stat-value">{{ item.value }}</strong>
       </article>
     </div>
+
+    <section class="todo-panel">
+      <h3>检修联动待办（{{ todos.count }} 台机组检修中）</h3>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>工作票号</th>
+            <th>检修机组</th>
+            <th>工作负责人</th>
+            <th>计划工期</th>
+            <th>待办事项</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="item in todos.items" :key="item.ticketId">
+            <td>{{ item.ticketNo }}</td>
+            <td>{{ item.unit }}</td>
+            <td>{{ item.leader }}</td>
+            <td>{{ item.plan }}</td>
+            <td>机组检修中，导轴承跟踪检查</td>
+          </tr>
+          <tr v-if="!todos.items.length">
+            <td colspan="5" class="empty-state">当前没有检修中的机组，暂无联动待办</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
 
     <p class="status-legend">
       <span v-for="item in statusSummary" :key="item.status" class="legend-item">
@@ -74,24 +101,37 @@
 import { computed, onMounted, ref } from 'vue'
 
 import {
+  bearingTodos,
   downloadEntries,
   listEntries,
   moduleMeta,
   runAction as applyAction,
 } from '@/api/local-service'
-import type { EntryRow } from '@/data/types'
+import type { BearingTodo, EntryRow } from '@/data/types'
 
 const meta = moduleMeta('bearing')
 const columns = ["轴承编号", "所属机组", "上导温度", "下导温度", "油位高度", "振动数值", "检测日期", "轴承状态"]
 const actions = ["提交检测", "标记偏高", "确认检修"]
 const statuses = ["正常", "温度偏高", "待检修", "已检修"]
-const stats = [{"label": "正常轴承", "value": 0}, {"label": "温度偏高轴承", "value": 0}, {"label": "待检修轴承", "value": 0}]
 
 const rows = ref<EntryRow[]>([])
 const total = ref(0)
 const errorMessage = ref('')
 const filters = ref<Record<string, string>>({})
 const filterFields = columns.slice(0, 3)
+const allItems = ref<EntryRow[]>([])
+const todos = ref<{ count: number; items: BearingTodo[] }>({ count: 0, items: [] })
+
+const statCards = computed(() => [
+  { label: '正常轴承', value: countByStatus('正常') },
+  { label: '温度偏高轴承', value: countByStatus('温度偏高') },
+  { label: '待检修轴承', value: countByStatus('待检修') },
+  { label: '检修中机组（台）', value: todos.value.count },
+])
+
+function countByStatus(status: string): number {
+  return allItems.value.filter((row) => String(row.status) === status).length
+}
 const statusSummary = computed(() =>
   statuses.map((status: string) => ({
     status,
@@ -128,6 +168,8 @@ function reload() {
     const payload = listEntries(meta.key, filters.value)
     rows.value = payload.items
     total.value = payload.total
+    allItems.value = listEntries(meta.key).items
+    todos.value = bearingTodos()
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '导轴承列表读取失败'
   }
@@ -135,3 +177,13 @@ function reload() {
 
 onMounted(reload)
 </script>
+
+<style scoped>
+.todo-panel {
+  margin-bottom: 14px;
+}
+.todo-panel h3 {
+  font-size: 14px;
+  margin: 0 0 8px;
+}
+</style>

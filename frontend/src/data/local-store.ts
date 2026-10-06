@@ -40,12 +40,29 @@ export function listRows(key: string): EntryRow[] {
   return allRows()[key] ?? []
 }
 
+// 写库只允许这一条路：失败自动重试一次，再失败就把原因抛给调用方，
+// 内存缓存保持原样，避免页面上两处读到的数对不上。
+function persist(payload: Record<string, EntryRow[]>): void {
+  if (typeof window === 'undefined' || !window.localStorage) {
+    return
+  }
+  const text = JSON.stringify(payload)
+  try {
+    window.localStorage.setItem(STORAGE_KEY, text)
+  } catch {
+    try {
+      window.localStorage.setItem(STORAGE_KEY, text)
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error)
+      throw new Error(`本地存储写入失败（已自动重试一次）：${reason}`)
+    }
+  }
+}
+
 export function saveRows(key: string, rows: EntryRow[]): void {
   const next = { ...allRows(), [key]: rows }
+  persist(next)
   cache = next
-  if (typeof window !== 'undefined' && window.localStorage) {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
-  }
 }
 
 export function resetRows(key: string): EntryRow[] {
